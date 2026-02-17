@@ -12,10 +12,24 @@ SCRIPT = Path(__file__).resolve().parent / "guard_and_run.py"
 
 
 def run(*args: str, env: dict[str, str] | None = None, input_text: str | None = None) -> tuple[int, str, str]:
+    if env is None:
+        base_env = dict(os.environ)
+        if not any(
+            base_env.get(name)
+            for name in (
+                "ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS",
+                "ELG_ALLOWED_COMMANDS",
+                "BABYLON_ALLOWED_COMMANDS",
+            )
+        ):
+            base_env["ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS"] = "python3"
+    else:
+        base_env = dict(env)
+
     command = [sys.executable, str(SCRIPT), *args]
     proc = subprocess.run(
         command,
-        env=env,
+        env=base_env,
         input=input_text,
         capture_output=True,
         text=True,
@@ -121,6 +135,28 @@ code, out, err = run(
 assert code == 2, (code, out, err)
 assert "requires delimiter --" in err, (out, err)
 
+# 6b) Missing allowlist by explicit env var should block execution.
+env_no_allowlist = {k: v for k, v in os.environ.items() if k not in {
+    "ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS",
+    "ELG_ALLOWED_COMMANDS",
+    "BABYLON_ALLOWED_COMMANDS",
+}}
+code, out, err = run(
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('should-not-run')",
+    env=env_no_allowlist,
+)
+assert code == 1, (code, out, err)
+assert "No command allowlist configured" in err, (out, err)
+
 # 7) Explicit allow-list blocks unexpected binaries.
 code, out, err = run(
     "--allowed-command",
@@ -208,6 +244,8 @@ assert out.strip() == "from-stdin", (out, err)
 
 # 12) Strict mode can also be sourced from env alias.
 code, out, err = run(
+    "--allowed-command",
+    "python3",
     "--app",
     "website",
     "--action",
@@ -223,6 +261,24 @@ code, out, err = run(
 assert code == 2, (code, out, err)
 assert "Blocked by enterprise legal guardrails" in err, err
 assert "should-not-run-env" not in out and "should-not-run-env" not in err, (out, err)
+
+# 12b) Unsafe escape hatch: allow any command only when explicitly enabled.
+code, out, err = run(
+    "--allow-any-command",
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('allow-any-ok')",
+    env=env_no_allowlist,
+)
+assert code == 0, (code, out, err)
+assert out.strip() == "allow-any-ok", (out, err)
 
 # 13) Max text bytes enforcement.
 code, out, err = run(
@@ -245,6 +301,8 @@ assert "max allowed bytes" in err, (out, err)
 # 14) Sanitized environment should remove unshared variables and keep explicit prefixes.
 with tempfile.TemporaryDirectory() as tmpdir:
     code, out, err = run(
+        "--allowed-command",
+        "python3",
         "--sanitize-env",
         "--keep-env",
         "KEEP_ME",
@@ -345,6 +403,8 @@ assert "must be a positive integer" in err
 
 # 19) Command not found should return 1 with explicit message.
 code, out, err = run(
+    "--allowed-command",
+    "definitely-missing-command",
     "--app",
     "website",
     "--action",

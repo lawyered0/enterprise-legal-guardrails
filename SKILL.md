@@ -143,6 +143,11 @@ A distributable bundle is available at:
 For non-native outbound integrations, treat `guard_and_run` as an execution
 boundary. Recommended flags/env:
 
+Execution safety is allowlist-first by default. Wrapper requires explicit
+`--allowed-command` (or env alias) unless `--allow-any-command` is explicitly enabled.
+
+- `--allow-any-command` / `ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND`
+  - Explicitly bypass allowlist enforcement (unsafe; audit-first use only).
 - `--allowed-command <exe...>` / `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`
   - Allow-list executables (supports comma/space lists and wildcards).
 - `--strict` / `ENTERPRISE_LEGAL_GUARDRAILS_STRICT`

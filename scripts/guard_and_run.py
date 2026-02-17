@@ -185,6 +185,8 @@ def _append_audit_log(
     dry_run: bool,
     command_exit_code: int | None,
     strict: bool,
+    allow_any_command: bool,
+    allowed_command_count: int,
 ) -> None:
     if not path:
         return
@@ -205,6 +207,8 @@ def _append_audit_log(
         "dry_run": dry_run,
         "command_exit_code": command_exit_code,
         "strict": bool(strict),
+        "allow_any_command": bool(allow_any_command),
+        "allowed_command_count": int(allowed_command_count),
     }
 
     log_path = Path(path).expanduser()
@@ -357,6 +361,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--allow-any-command",
+        action="store_true",
+        default=_get_env_bool(
+            "ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND",
+            "ELG_ALLOW_ANY_COMMAND",
+            "BABYLON_ALLOW_ANY_COMMAND",
+            default=False,
+        ),
+        help="Dangerously bypass command allowlist (not recommended).",
+    )
+
+    parser.add_argument(
         "--allowed-command",
         nargs="*",
         default=_split_csv(
@@ -459,6 +475,21 @@ def main() -> int:
         print("--checker-timeout must be a positive integer.", file=sys.stderr)
         return 2
 
+    if not args.allow_any_command and not args.allowed_command:
+        print(
+            "No command allowlist configured: set --allowed-command (or ELG/BABYLON_ALLOWED_COMMANDS) "
+            "or pass --allow-any-command explicitly.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.allow_any_command:
+        print(
+            "WARNING: --allow-any-command enabled; command allowlist is bypassed."
+            " This is unsafe for production unless deliberately audited.",
+            file=sys.stderr,
+        )
+
     if not _is_allowed(command, args.allowed_command):
         print(
             f"Blocked command '{_command_repr(command)}' because it is not in the allowlist.",
@@ -497,6 +528,8 @@ def main() -> int:
             dry_run=args.dry_run,
             command_exit_code=None,
             strict=args.strict,
+        allow_any_command=args.allow_any_command,
+        allowed_command_count=len(args.allowed_command),
         )
         return 2
 
@@ -512,6 +545,8 @@ def main() -> int:
             dry_run=True,
             command_exit_code=None,
             strict=args.strict,
+        allow_any_command=args.allow_any_command,
+        allowed_command_count=len(args.allowed_command),
         )
         return 0
 
@@ -534,6 +569,8 @@ def main() -> int:
             dry_run=False,
             command_exit_code=None,
             strict=args.strict,
+        allow_any_command=args.allow_any_command,
+        allowed_command_count=len(args.allowed_command),
         )
         return 1
     except subprocess.TimeoutExpired:
@@ -549,6 +586,8 @@ def main() -> int:
             dry_run=False,
             command_exit_code=None,
             strict=args.strict,
+        allow_any_command=args.allow_any_command,
+        allowed_command_count=len(args.allowed_command),
         )
         return 1
 
@@ -563,6 +602,8 @@ def main() -> int:
         dry_run=False,
         command_exit_code=proc.returncode,
         strict=args.strict,
+        allow_any_command=args.allow_any_command,
+        allowed_command_count=len(args.allowed_command),
     )
 
     return proc.returncode

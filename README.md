@@ -112,8 +112,12 @@ Notes:
 - `2` BLOCK
 ## Security hardening for `guard_and_run`
 
+By default, execution is allowlist-gated: at least one of `--allowed-command` or env allowlist variables must be set, otherwise this command exits with code 1. Use `--allow-any-command` only with explicit audit controls.
+
 When outbound commands are executed through the adapter, use these safety controls:
 
+- `--allow-any-command` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND`)
+  - Dangerous explicit opt-out. Allows any command and should only be used with strict auditing.
 - `--allowed-command <pattern...>` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`)
   - Restrict executed binaries to a whitelist (`python3,gog` etc.).
 - `--strict` (or `ENTERPRISE_LEGAL_GUARDRAILS_STRICT=true`)
