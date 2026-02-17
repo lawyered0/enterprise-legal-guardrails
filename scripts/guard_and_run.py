@@ -93,7 +93,7 @@ def run_guardrails(
         raise RuntimeError(f"Guardrail checker output was invalid JSON: {exc}")
 
     status = report.get("status")
-    if proc.returncode not in {0, 1}:
+    if proc.returncode not in {0, 1, 2}:
         err = (proc.stderr or "").strip()
         raise RuntimeError(
             f"Guardrail check failed before execution (exit={proc.returncode}). {status=} {err}".strip()
