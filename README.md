@@ -110,3 +110,33 @@ Notes:
 - `0` PASS/WATCH
 - `1` REVIEW
 - `2` BLOCK
+## Security hardening for `guard_and_run`
+
+When outbound commands are executed through the adapter, use these safety controls:
+
+- `--allowed-command <pattern...>` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`)
+  - Restrict executed binaries to a whitelist (`python3,gog` etc.).
+- `--strict` (or `ENTERPRISE_LEGAL_GUARDRAILS_STRICT=true`)
+  - Treat `REVIEW` as hard `BLOCK`.
+- `--sanitize-env`
+  - Use a reduced environment (`PATH`, `HOME`, `TMP*`, locale vars) and optional `--keep-env` / `--keep-env-prefix` allow-lists.
+- `--command-timeout` / `--checker-timeout`
+  - Bound command and checker execution to avoid hangs.
+- `--max-text-bytes`
+  - Reject oversized outbound drafts before execution.
+- `--audit-log <file>` (or `ENTERPRISE_LEGAL_GUARDRAILS_AUDIT_LOG`)
+  - JSONL audit trail with redacted text/command digests.
+
+Example:
+
+```bash
+python3 scripts/guard_and_run.py \
+  --app gmail \
+  --action message \
+  --allowed-command python3,gog \
+  --sanitize-env --keep-env-prefix GOG_ \
+  --command-timeout 45 \
+  --audit-log .guard-guardrails-audit.jsonl \
+  --text "..." \
+  -- gog gmail send ...
+```

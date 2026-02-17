@@ -138,3 +138,19 @@ See `references/guardrail-policy-map.md` for the full policy rule set and sugges
 
 A distributable bundle is available at:
 - `dist/enterprise-legal-guardrails.skill`
+### Hardening controls for `guard_and_run.py`
+
+For non-native outbound integrations, treat `guard_and_run` as an execution
+boundary. Recommended flags/env:
+
+- `--allowed-command <exe...>` / `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`
+  - Allow-list executables (supports comma/space lists and wildcards).
+- `--strict` / `ENTERPRISE_LEGAL_GUARDRAILS_STRICT`
+  - Escalate `REVIEW` to hard block.
+- `--sanitize-env`
+- `--keep-env <VAR...>` / `--keep-env-prefix <PREFIX...>`
+- `--command-timeout`, `--checker-timeout`, `--max-text-bytes`
+- `--audit-log <file>` / `ENTERPRISE_LEGAL_GUARDRAILS_AUDIT_LOG`
+
+These flags provide execution safety, command scoping, and immutable trail for
+post-incident review without changing checker logic.
