@@ -559,7 +559,7 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    if not _is_allowed(command, args.allowed_command):
+    if not args.allow_any_command and not _is_allowed(command, args.allowed_command):
         print(
             f"Blocked command '{_command_repr(command)}' because it is not in the allowlist.",
             file=sys.stderr,

@@ -347,6 +347,49 @@ assert code == 0, (code, out, err)
 assert out.strip() == "allow-any-no-warning", (out, err)
 assert "Runtime notice: --allow-any-command is enabled" not in err, (out, err)
 
+# 12f) allow-any truly bypasses allowlist when an allowlist is present.
+code, out, err = run(
+    "--allow-any-command",
+    "--allow-any-command-reason",
+    "SEC-1005: temporary migration task",
+    "--allow-any-command-approval-token",
+    "ci-token-abc",
+    "--allowed-command",
+    "/usr/bin/echo",
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('allow-any-bypasses')",
+    env=env_no_allowlist,
+)
+assert code == 0, (code, out, err)
+assert out.strip() == "allow-any-bypasses", (out, err)
+
+# sanity: without allow-any, allowlist still blocks non-matching executable.
+code, out, err = run(
+    "--allowed-command",
+    "/usr/bin/echo",
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('should-not-run-list')",
+    env=env_no_allowlist,
+)
+assert code == 1, (code, out, err)
+assert "Blocked command" in err and "should-not-run-list" in err and "because it is not in the allowlist." in err
+
 # 13) Max text bytes enforcement.
 code, out, err = run(
     "--app",
