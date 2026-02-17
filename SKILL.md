@@ -148,6 +148,8 @@ Execution safety is allowlist-first by default. Wrapper requires explicit
 
 - `--allow-any-command` / `ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND`
   - Explicitly bypass allowlist enforcement (unsafe; audit-first use only).
+- `--suppress-allow-any-warning` / `ENTERPRISE_LEGAL_GUARDRAILS_SUPPRESS_ALLOW_ANY_WARNING`
+  - Suppresses the runtime safety warning when `--allow-any-command` is intentionally enabled.
 - `--allowed-command <exe...>` / `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`
   - Allow-list executables (supports comma/space lists and wildcards).
 - `--strict` / `ENTERPRISE_LEGAL_GUARDRAILS_STRICT`

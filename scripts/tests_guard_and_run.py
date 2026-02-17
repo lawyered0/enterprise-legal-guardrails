@@ -279,6 +279,27 @@ code, out, err = run(
 )
 assert code == 0, (code, out, err)
 assert out.strip() == "allow-any-ok", (out, err)
+assert "Runtime notice: --allow-any-command is enabled" in err, (out, err)
+
+# 12c) Runtime warning can be suppressed explicitly.
+code, out, err = run(
+    "--allow-any-command",
+    "--suppress-allow-any-warning",
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('allow-any-no-warning')",
+    env=env_no_allowlist,
+)
+assert code == 0, (code, out, err)
+assert out.strip() == "allow-any-no-warning", (out, err)
+assert "Runtime notice: --allow-any-command is enabled" not in err, (out, err)
 
 # 13) Max text bytes enforcement.
 code, out, err = run(

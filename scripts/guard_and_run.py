@@ -373,6 +373,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--suppress-allow-any-warning",
+        action="store_true",
+        default=_get_env_bool(
+            "ENTERPRISE_LEGAL_GUARDRAILS_SUPPRESS_ALLOW_ANY_WARNING",
+            "ELG_SUPPRESS_ALLOW_ANY_WARNING",
+            "BABYLON_SUPPRESS_ALLOW_ANY_WARNING",
+            default=False,
+        ),
+        help="Suppress warning when allowlist bypass is enabled via --allow-any-command.",
+    )
+
+    parser.add_argument(
         "--allowed-command",
         nargs="*",
         default=_split_csv(
@@ -483,10 +495,10 @@ def main() -> int:
         )
         return 1
 
-    if args.allow_any_command:
+    if args.allow_any_command and not args.suppress_allow_any_warning:
         print(
-            "WARNING: --allow-any-command enabled; command allowlist is bypassed."
-            " This is unsafe for production unless deliberately audited.",
+            "Runtime notice: --allow-any-command is enabled; command allowlist is bypassed."
+            " This is unsafe for production unless intentionally approved and audited.",
             file=sys.stderr,
         )
 

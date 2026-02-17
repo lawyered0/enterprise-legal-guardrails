@@ -118,6 +118,8 @@ When outbound commands are executed through the adapter, use these safety contro
 
 - `--allow-any-command` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND`)
   - Dangerous explicit opt-out. Allows any command and should only be used with strict auditing.
+- `--suppress-allow-any-warning` (or `ENTERPRISE_LEGAL_GUARDRAILS_SUPPRESS_ALLOW_ANY_WARNING`)
+  - Suppresses the built-in runtime warning for this run. Use only with explicit operational approval.
 - `--allowed-command <pattern...>` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`)
   - Restrict executed binaries to a whitelist (`python3,gog` etc.).
 - `--strict` (or `ENTERPRISE_LEGAL_GUARDRAILS_STRICT=true`)
