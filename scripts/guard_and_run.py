@@ -12,8 +12,8 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import shlex
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -102,6 +102,12 @@ def _hash_command(command: list[str]) -> str:
     return hashlib.sha256(joined.encode("utf-8", errors="ignore").strip()).hexdigest()
 
 
+def _fingerprint_token(token: str | None) -> str:
+    if not token:
+        return ""
+    return hashlib.sha256(token.encode("utf-8", errors="ignore").strip()).hexdigest()[:12]
+
+
 def _command_repr(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
@@ -188,6 +194,7 @@ def _append_audit_log(
     allow_any_command: bool,
     allowed_command_count: int,
     allow_any_command_reason: str | None,
+    allow_any_command_approval_token: str | None,
 ) -> None:
     if not path:
         return
@@ -211,6 +218,7 @@ def _append_audit_log(
         "allow_any_command": bool(allow_any_command),
         "allowed_command_count": int(allowed_command_count),
         "allow_any_command_reason": allow_any_command_reason or "",
+        "allow_any_command_approval_token": _fingerprint_token(allow_any_command_approval_token),
     }
 
     log_path = Path(path).expanduser()
@@ -394,6 +402,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
         help="Mandatory rationale when allowlist bypass is explicitly enabled.",
     )
+    parser.add_argument(
+        "--allow-any-command-approval-token",
+        default=_get_env(
+            "ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_APPROVAL_TOKEN",
+            "ELG_ALLOW_ANY_COMMAND_APPROVAL_TOKEN",
+            "BABYLON_ALLOW_ANY_COMMAND_APPROVAL_TOKEN",
+        ),
+        help="Mandatory approval token when allowlist bypass is explicitly enabled.",
+    )
 
     parser.add_argument(
         "--allowed-command",
@@ -514,10 +531,30 @@ def main() -> int:
         )
         return 2
 
+    if args.allow_any_command and not args.allow_any_command_approval_token:
+        print(
+            "Refusing --allow-any-command without approval token. "
+            "Set --allow-any-command-approval-token or ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_APPROVAL_TOKEN.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.allow_any_command and not re.search(
+        r"^(?:[A-Z][A-Z0-9_]{2,}-\d{2,}:|INC-\d{3,}:|TICKET-[0-9]{3,}:)",
+        args.allow_any_command_reason,
+    ):
+        print(
+            "Refusing --allow-any-command because reason format is invalid. "
+            "Use a ticket-like reason, e.g. 'SEC-1234: temporary migration task'.",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.allow_any_command and not args.suppress_allow_any_warning:
         print(
             "Runtime notice: --allow-any-command is enabled; command allowlist is bypassed."
             f" Reason: {args.allow_any_command_reason}. "
+            f"Approval: {_fingerprint_token(args.allow_any_command_approval_token)}. "
             "This is unsafe for production unless intentionally approved and audited.",
             file=sys.stderr,
         )
@@ -563,6 +600,7 @@ def main() -> int:
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
         allow_any_command_reason=args.allow_any_command_reason,
+        allow_any_command_approval_token=args.allow_any_command_approval_token,
         )
         return 2
 
@@ -581,6 +619,7 @@ def main() -> int:
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
         allow_any_command_reason=args.allow_any_command_reason,
+        allow_any_command_approval_token=args.allow_any_command_approval_token,
         )
         return 0
 
@@ -606,6 +645,7 @@ def main() -> int:
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
         allow_any_command_reason=args.allow_any_command_reason,
+        allow_any_command_approval_token=args.allow_any_command_approval_token,
         )
         return 1
     except subprocess.TimeoutExpired:
@@ -624,6 +664,7 @@ def main() -> int:
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
         allow_any_command_reason=args.allow_any_command_reason,
+        allow_any_command_approval_token=args.allow_any_command_approval_token,
         )
         return 1
 
@@ -641,6 +682,7 @@ def main() -> int:
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
         allow_any_command_reason=args.allow_any_command_reason,
+        allow_any_command_approval_token=args.allow_any_command_approval_token,
     )
 
     return proc.returncode

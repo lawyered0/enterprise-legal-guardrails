@@ -280,11 +280,33 @@ code, out, err = run(
 assert code == 2, (code, out, err)
 assert "Refusing --allow-any-command without an explicit rationale" in err, (out, err)
 
-# 12c) Unsafe escape hatch: allow any command only when explicitly enabled + reason.
+# 12c) Missing approval token is refused even with rationale.
 code, out, err = run(
     "--allow-any-command",
     "--allow-any-command-reason",
-    "ci-bypass-for-testing",
+    "SEC-1001: temporary migration task",
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('allow-any-blocked')",
+    env=env_no_allowlist,
+)
+assert code == 2, (code, out, err)
+assert "Refusing --allow-any-command without approval token" in err, (out, err)
+
+# 12d) Unsafe escape hatch: allow any command only when explicitly enabled + reason+token.
+code, out, err = run(
+    "--allow-any-command",
+    "--allow-any-command-reason",
+    "SEC-1002: temporary migration task",
+    "--allow-any-command-approval-token",
+    "ci-token-abc",
     "--app",
     "website",
     "--action",
@@ -301,11 +323,13 @@ assert code == 0, (code, out, err)
 assert out.strip() == "allow-any-ok", (out, err)
 assert "Runtime notice: --allow-any-command is enabled" in err, (out, err)
 
-# 12d) Runtime warning can be suppressed explicitly.
+# 12e) Runtime warning can be suppressed explicitly.
 code, out, err = run(
     "--allow-any-command",
     "--allow-any-command-reason",
-    "ci-bypass-without-warning",
+    "SEC-1003: temporary migration task",
+    "--allow-any-command-approval-token",
+    "ci-token-abc",
     "--suppress-allow-any-warning",
     "--app",
     "website",
@@ -526,7 +550,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
     code, out, err = run(
         "--allow-any-command",
         "--allow-any-command-reason",
-        "incident_approved_by_security",
+        "SEC-1004: incident approved by security",
+        "--allow-any-command-approval-token",
+        "ci-token-abc",
         "--audit-log",
         str(log_path),
         "--app",
@@ -546,6 +572,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert len(rows) == 1, rows
     rec = json.loads(rows[0])
     assert rec["allow_any_command"] is True
-    assert rec["allow_any_command_reason"] == "incident_approved_by_security"
+    assert rec["allow_any_command_reason"] == "SEC-1004: incident approved by security"
+    assert rec["allow_any_command_approval_token"]
 
 print("ok")

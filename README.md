@@ -121,7 +121,9 @@ When outbound commands are executed through the adapter, use these safety contro
 - `--suppress-allow-any-warning` (or `ENTERPRISE_LEGAL_GUARDRAILS_SUPPRESS_ALLOW_ANY_WARNING`)
   - Suppresses the built-in runtime warning for this run. Use only with explicit operational approval.
 - `--allow-any-command-reason` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_REASON`)
-  - Required when using `--allow-any-command`. Include short rationale (ticket ID / incident ticket / just-in-case approval).
+  - Required when using `--allow-any-command`. Include short rationale with ticket format (`SEC-####: ...`).
+- `--allow-any-command-approval-token` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_APPROVAL_TOKEN`)
+  - Required when using `--allow-any-command`. This is logged as a short hash fingerprint in audit logs.
 - `--allowed-command <pattern...>` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`)
   - Restrict executed binaries to a whitelist (`python3,gog` etc.).
 - `--strict` (or `ENTERPRISE_LEGAL_GUARDRAILS_STRICT=true`)
