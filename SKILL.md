@@ -92,6 +92,19 @@ If no profile is provided, defaults are derived from `--action`:
 - `REVIEW`: human/legal review recommended
 - `BLOCK`: do not execute
 
+## Tuning
+
+You can tune decision sensitivity via environment variables (or CLI flags in direct runs):
+
+- `ENTERPRISE_LEGAL_GUARDRAILS_REVIEW_THRESHOLD` (`default: 5`)
+- `ENTERPRISE_LEGAL_GUARDRAILS_BLOCK_THRESHOLD` (`default: 9`)
+
+CLI overrides:
+- `--review-threshold`
+- `--block-threshold`
+
+Legacy aliases are supported in legacy env names: `ELG_*` and `BABYLON_GUARDRAILS_*`.
+
 ## Compatibility
 
 Legacy name `legal-risk-checker` is preserved in OpenClaw workspaces that still reference it.

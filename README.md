@@ -78,6 +78,18 @@ export ENTERPRISE_LEGAL_GUARDRAILS_STRICT=false   # set true to block on REVIEW
 export ENTERPRISE_LEGAL_GUARDRAILS_POLICIES=social,antispam,hr,privacy,market,financial,legal
 ```
 
+## Tuning
+
+You can tune sensitivity without changing rules:
+
+- `ENTERPRISE_LEGAL_GUARDRAILS_REVIEW_THRESHOLD` (default `5`)
+- `ENTERPRISE_LEGAL_GUARDRAILS_BLOCK_THRESHOLD` (default `9`)
+- Alias: `ELG_*` and `BABYLON_GUARDRAILS_*` equivalents
+
+CLI overrides:
+- `--review-threshold <int>`
+- `--block-threshold <int>`
+
 ## Exit codes
 
 - `0` PASS/WATCH

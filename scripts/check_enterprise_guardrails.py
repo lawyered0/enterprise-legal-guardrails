@@ -153,6 +153,11 @@ PROFILE_CHOICES = {"social", "antispam", "hr", "privacy", "market", "financial",
 
 SCOPE_CHOICES = {"all", "include", "exclude"}
 
+DEFAULT_REVIEW_THRESHOLD = 5
+DEFAULT_BLOCK_THRESHOLD = 9
+
+
+
 
 def _normalize(value: str | None) -> str:
     return (value or "").strip().lower()
@@ -179,13 +184,24 @@ def _split_list(raw: str | None) -> List[str]:
     return [value.strip().lower() for value in raw.split(",") if value.strip()]
 
 
-def _normalize_app_targets(values: Sequence[str] | None) -> List[str]:
-    if not values:
-        return []
-    normalized: List[str] = []
-    for value in values:
-        normalized.extend(_split_list(value))
-    return list(dict.fromkeys([_normalize(v) for v in normalized if _normalize(v)]))
+def _get_env_int(*names: str, default: int) -> int:
+    raw = _get_env(*names)
+    if raw is None:
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return default
+
+
+def _normalize_thresholds(review_threshold: int, block_threshold: int) -> tuple[int, int]:
+    normalized_review = max(review_threshold, 0)
+    normalized_block = max(block_threshold, normalized_review + 1)
+
+    if normalized_block <= normalized_review:
+        normalized_block = normalized_review + 1
+
+    return normalized_review, normalized_block
 
 
 def _normalize_scope(value: str | None) -> str:
@@ -193,6 +209,15 @@ def _normalize_scope(value: str | None) -> str:
     if normalized not in SCOPE_CHOICES:
         return "all"
     return normalized
+
+
+def _normalize_app_targets(values: Sequence[str] | None) -> List[str]:
+    if not values:
+        return []
+    normalized: List[str] = []
+    for value in values:
+        normalized.extend(_split_list(value))
+    return list(dict.fromkeys([_normalize(v) for v in normalized if _normalize(v)]))
 
 
 def _should_apply_for_app(action_app: str | None, scope: str, app_targets: Sequence[str]) -> bool:
@@ -234,7 +259,7 @@ def _load_text(args_text: str | None, file_path: str | None) -> str:
     return ""
 
 
-def _analyze(text: str, action: str, profiles: List[str]) -> Dict:
+def _analyze(text: str, action: str, profiles: List[str], review_threshold: int, block_threshold: int) -> Dict:
     lowered = text.lower()
     selected_profiles = set(profiles)
     score = 0
@@ -280,9 +305,9 @@ def _analyze(text: str, action: str, profiles: List[str]) -> Dict:
 
     if not findings:
         status = "PASS"
-    elif score >= 9:
+    elif score >= block_threshold:
         status = "BLOCK"
-    elif score >= 5:
+    elif score >= review_threshold:
         status = "REVIEW"
     else:
         status = "WATCH"
@@ -313,6 +338,10 @@ def _analyze(text: str, action: str, profiles: List[str]) -> Dict:
         "safe_text": safe_text if safe_text != text else text,
         "suggestions": suggestions,
         "policy": "PASS = execute, WATCH = optional cleanup, REVIEW = manual review, BLOCK = do not execute",
+        "thresholds": {
+            "review": review_threshold,
+            "block": block_threshold,
+        },
     }
 
 
@@ -324,9 +353,15 @@ def analyze_text(
     scope: str = "all",
     app_targets: Sequence[str] | None = None,
     enabled: bool = True,
+    review_threshold: int | None = None,
+    block_threshold: int | None = None,
 ) -> Dict:
     profile_list = _effective_policies(policies, action)
     normalized_scope = _normalize_scope(scope)
+
+    normalized_review = DEFAULT_REVIEW_THRESHOLD if review_threshold is None else review_threshold
+    normalized_block = DEFAULT_BLOCK_THRESHOLD if block_threshold is None else block_threshold
+    review_threshold, block_threshold = _normalize_thresholds(normalized_review, normalized_block)
 
     if not enabled:
         return {
@@ -341,6 +376,10 @@ def analyze_text(
                 "mode": normalized_scope,
                 "apps": list(app_targets or []),
                 "applied": False,
+            },
+            "thresholds": {
+                "review": review_threshold,
+                "block": block_threshold,
             },
             "original_text": text,
             "safe_text": text,
@@ -362,13 +401,17 @@ def analyze_text(
                 "apps": list(app_targets or []),
                 "applied": False,
             },
+            "thresholds": {
+                "review": review_threshold,
+                "block": block_threshold,
+            },
             "original_text": text,
             "safe_text": text,
             "suggestions": ["Guardrails did not run for this app due scope settings."],
             "policy": "PASS = execute (scope excluded)",
         }
 
-    report = _analyze(text, action, profile_list)
+    report = _analyze(text, action, profile_list, review_threshold=review_threshold, block_threshold=block_threshold)
     report["profiles"] = profile_list
     report["app"] = app
     report["scope"] = {
@@ -398,6 +441,7 @@ def render_text(report: Dict) -> str:
         [
             f"score: {report['score']}",
             f"findings: {report['findings_count']}",
+            f"thresholds: review={report.get('thresholds', {}).get('review', 'n/a')} block={report.get('thresholds', {}).get('block', 'n/a')}",
         ]
     )
 
@@ -464,6 +508,18 @@ def parse_args() -> argparse.Namespace:
         )),
         help="App names used with scope mode when include|exclude (comma/space separated list).",
     )
+    parser.add_argument(
+        "--review-threshold",
+        type=int,
+        default=None,
+        help="Override review threshold (default from env/default config).",
+    )
+    parser.add_argument(
+        "--block-threshold",
+        type=int,
+        default=None,
+        help="Override block threshold (default from env/default config).",
+    )
     parser.add_argument("--text", default="", help="Text content to analyze")
     parser.add_argument("--file", default="", help="Optional file path for content")
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -490,6 +546,25 @@ def main() -> int:
     )
 
     app_targets = _normalize_app_targets(args.apps)
+    review_threshold = _get_env_int(
+        "ENTERPRISE_LEGAL_GUARDRAILS_REVIEW_THRESHOLD",
+        "ELG_REVIEW_THRESHOLD",
+        "BABYLON_GUARDRAILS_REVIEW_THRESHOLD",
+        default=DEFAULT_REVIEW_THRESHOLD,
+    )
+    block_threshold = _get_env_int(
+        "ENTERPRISE_LEGAL_GUARDRAILS_BLOCK_THRESHOLD",
+        "ELG_BLOCK_THRESHOLD",
+        "BABYLON_GUARDRAILS_BLOCK_THRESHOLD",
+        default=DEFAULT_BLOCK_THRESHOLD,
+    )
+
+    if args.review_threshold is not None:
+        review_threshold = args.review_threshold
+    if args.block_threshold is not None:
+        block_threshold = args.block_threshold
+
+    review_threshold, block_threshold = _normalize_thresholds(review_threshold, block_threshold)
 
     report = analyze_text(
         text,
@@ -499,6 +574,8 @@ def main() -> int:
         scope=_normalize_scope(args.scope),
         app_targets=app_targets,
         enabled=enabled and not args.no_guard,
+        review_threshold=review_threshold,
+        block_threshold=block_threshold,
     )
 
     if args.json:
