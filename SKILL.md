@@ -1,6 +1,6 @@
 ---
 name: enterprise-legal-guardrails
-description: Enterprise-grade compliance and legal guardrails for outbound bot actions, with checks for anti-spam, policy risk, HR-sensitive language, privacy leakage, defamation risk, and financial claim controls.
+description: Legal/compliance guardrails for outbound OpenClaw actions (anti-spam, defamation, privacy, financial claims).
 ---
 
 # Enterprise Legal Guardrails
