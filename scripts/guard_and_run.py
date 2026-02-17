@@ -187,6 +187,7 @@ def _append_audit_log(
     strict: bool,
     allow_any_command: bool,
     allowed_command_count: int,
+    allow_any_command_reason: str | None,
 ) -> None:
     if not path:
         return
@@ -209,6 +210,7 @@ def _append_audit_log(
         "strict": bool(strict),
         "allow_any_command": bool(allow_any_command),
         "allowed_command_count": int(allowed_command_count),
+        "allow_any_command_reason": allow_any_command_reason or "",
     }
 
     log_path = Path(path).expanduser()
@@ -383,6 +385,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
         help="Suppress warning when allowlist bypass is enabled via --allow-any-command.",
     )
+    parser.add_argument(
+        "--allow-any-command-reason",
+        default=_get_env(
+            "ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_REASON",
+            "ELG_ALLOW_ANY_COMMAND_REASON",
+            "BABYLON_ALLOW_ANY_COMMAND_REASON",
+        ),
+        help="Mandatory rationale when allowlist bypass is explicitly enabled.",
+    )
 
     parser.add_argument(
         "--allowed-command",
@@ -495,10 +506,19 @@ def main() -> int:
         )
         return 1
 
+    if args.allow_any_command and not args.allow_any_command_reason:
+        print(
+            "Refusing --allow-any-command without an explicit rationale. "
+            "Set --allow-any-command-reason or ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_REASON.",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.allow_any_command and not args.suppress_allow_any_warning:
         print(
             "Runtime notice: --allow-any-command is enabled; command allowlist is bypassed."
-            " This is unsafe for production unless intentionally approved and audited.",
+            f" Reason: {args.allow_any_command_reason}. "
+            "This is unsafe for production unless intentionally approved and audited.",
             file=sys.stderr,
         )
 
@@ -542,6 +562,7 @@ def main() -> int:
             strict=args.strict,
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
+        allow_any_command_reason=args.allow_any_command_reason,
         )
         return 2
 
@@ -559,6 +580,7 @@ def main() -> int:
             strict=args.strict,
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
+        allow_any_command_reason=args.allow_any_command_reason,
         )
         return 0
 
@@ -583,6 +605,7 @@ def main() -> int:
             strict=args.strict,
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
+        allow_any_command_reason=args.allow_any_command_reason,
         )
         return 1
     except subprocess.TimeoutExpired:
@@ -600,6 +623,7 @@ def main() -> int:
             strict=args.strict,
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
+        allow_any_command_reason=args.allow_any_command_reason,
         )
         return 1
 
@@ -616,6 +640,7 @@ def main() -> int:
         strict=args.strict,
         allow_any_command=args.allow_any_command,
         allowed_command_count=len(args.allowed_command),
+        allow_any_command_reason=args.allow_any_command_reason,
     )
 
     return proc.returncode

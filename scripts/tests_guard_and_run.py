@@ -262,9 +262,29 @@ assert code == 2, (code, out, err)
 assert "Blocked by enterprise legal guardrails" in err, err
 assert "should-not-run-env" not in out and "should-not-run-env" not in err, (out, err)
 
-# 12b) Unsafe escape hatch: allow any command only when explicitly enabled.
+# 12b) Unsafe escape hatch requires explicit reason.
 code, out, err = run(
     "--allow-any-command",
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('allow-any-blocked')",
+    env=env_no_allowlist,
+)
+assert code == 2, (code, out, err)
+assert "Refusing --allow-any-command without an explicit rationale" in err, (out, err)
+
+# 12c) Unsafe escape hatch: allow any command only when explicitly enabled + reason.
+code, out, err = run(
+    "--allow-any-command",
+    "--allow-any-command-reason",
+    "ci-bypass-for-testing",
     "--app",
     "website",
     "--action",
@@ -281,9 +301,11 @@ assert code == 0, (code, out, err)
 assert out.strip() == "allow-any-ok", (out, err)
 assert "Runtime notice: --allow-any-command is enabled" in err, (out, err)
 
-# 12c) Runtime warning can be suppressed explicitly.
+# 12d) Runtime warning can be suppressed explicitly.
 code, out, err = run(
     "--allow-any-command",
+    "--allow-any-command-reason",
+    "ci-bypass-without-warning",
     "--suppress-allow-any-warning",
     "--app",
     "website",
@@ -497,5 +519,33 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert rec1["dry_run"] is False
     assert rec2["command_ran"] is False
     assert rec2["dry_run"] is True
+
+# 22) allow-any command executions should log explicit reason.
+with tempfile.TemporaryDirectory() as tmpdir:
+    log_path = Path(tmpdir) / "guard_audit_reason.jsonl"
+    code, out, err = run(
+        "--allow-any-command",
+        "--allow-any-command-reason",
+        "incident_approved_by_security",
+        "--audit-log",
+        str(log_path),
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--",
+        "python3",
+        "-c",
+        "print('reason-ok')",
+        env=env_no_allowlist,
+    )
+    assert code == 0, (code, out, err)
+    rows = [line for line in log_path.read_text().splitlines() if line.strip()]
+    assert len(rows) == 1, rows
+    rec = json.loads(rows[0])
+    assert rec["allow_any_command"] is True
+    assert rec["allow_any_command_reason"] == "incident_approved_by_security"
 
 print("ok")
