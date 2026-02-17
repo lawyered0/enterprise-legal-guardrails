@@ -105,6 +105,27 @@ CLI overrides:
 
 Legacy aliases are supported in legacy env names: `ELG_*` and `BABYLON_GUARDRAILS_*`.
 
+## Universal outbound adapter (no-native integration path)
+
+For skills/tools without native guardrail hooks (for example: Gmail, custom website
+publishing, custom message bots), run outbound operations through the wrapper:
+
+```bash
+python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app <app_name>   --action <post|comment|message|trade|market-analysis|generic>   --text "$DRAFT"   -- <outbound command...>
+```
+
+Examples:
+
+```bash
+# Gmail via gog
+python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app gmail --action message   --text "Hello, ..."   -- gog gmail send --to user@domain.com --subject "Update" --body "Hello, ..."
+
+# Website/publication publish flow
+python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app website --action post   --text "$POST_COPY"   -- npm run publish-post "$POST_COPY"
+```
+
+Use this wrapper to apply the same policy checks in non-Babylon outbound flows.
+
 ## Compatibility
 
 Legacy name `legal-risk-checker` is preserved in OpenClaw workspaces that still reference it.

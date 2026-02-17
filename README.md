@@ -90,6 +90,21 @@ CLI overrides:
 - `--review-threshold <int>`
 - `--block-threshold <int>`
 
+## Universal outbound adapter (no-native integration path)
+
+For command-based outbound flows that don't yet call the guardrails directly (e.g., gog
+Gmail/website scripts), run your command through:
+
+```bash
+python3 scripts/check_enterprise_guardrails.py ... # run checks directly
+# or (recommended)
+python3 scripts/guard_and_run.py   --app gmail --action message   --text "$DRAFT"   -- gog gmail send --to user@domain.com --subject "Update" --body "$DRAFT"
+```
+
+Notes:
+- `--action` should match the outbound intent: `message` for email/chat, `post` for public content.
+- `--app` sets the app namespace (e.g., `gmail`, `website`, `babylon`, `slack`).
+
 ## Exit codes
 
 - `0` PASS/WATCH
