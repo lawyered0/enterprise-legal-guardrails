@@ -533,7 +533,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    text = _load_text(args.text if args.text else None, args.file if args.file else None)
+    try:
+        text = _load_text(args.text if args.text else None, args.file if args.file else None)
+    except OSError as exc:
+        print(f"Unable to read input text: {exc}", file=sys.stderr)
+        return 1
+
     if not text:
         print("No text provided. Use --text, --file, or pipe text via stdin.", file=sys.stderr)
         return 1
