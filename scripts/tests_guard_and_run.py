@@ -541,6 +541,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert "timed out" in (rec.get("error_message") or "").lower(), rec
     assert rec["command_exit_code"] is None, rec
     assert rec["command_ran"] is False, rec
+    assert rec["guardrail_ms"] is not None and rec["guardrail_ms"] >= 0, rec
+    assert rec["command_ms"] is not None and rec["command_ms"] >= 900, rec
 
 # 16) dry-run does not execute the wrapped command.
 with tempfile.TemporaryDirectory() as tmpdir:
@@ -624,6 +626,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert rec["error_kind"] == "execution.command_not_found", rec
     assert rec["command_ran"] is False, rec
     assert rec["command_exit_code"] is None, rec
+    assert rec["guardrail_ms"] is not None and rec["guardrail_ms"] >= 0, rec
+    assert rec["command_ms"] is not None and rec["command_ms"] >= 0, rec
     assert "definitely-missing-command" in (rec.get("error_message") or ""), rec
 
 # 20) Non-zero command exit code should be propagated with audit context.
@@ -652,6 +656,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert rec["error_kind"] == "execution.command_exit_nonzero", rec
     assert rec["command_exit_code"] == 5, rec
     assert rec["command_ran"] is True, rec
+    assert rec["guardrail_ms"] is not None and rec["guardrail_ms"] >= 0, rec
+    assert rec["command_ms"] is not None and rec["command_ms"] > 0, rec
     assert rec.get("error_message", "") == "Command exited with code 5.", rec
 
 # 21) Audit log writes JSONL and appends across runs.
@@ -696,8 +702,12 @@ with tempfile.TemporaryDirectory() as tmpdir:
     rec2 = json.loads(lines[1])
     assert rec1["command_ran"] is True
     assert rec1["dry_run"] is False
+    assert rec1["command_ms"] is not None and rec1["command_ms"] >= 0, rec1
+    assert rec1["guardrail_ms"] is not None and rec1["guardrail_ms"] >= 0, rec1
     assert rec2["command_ran"] is False
     assert rec2["dry_run"] is True
+    assert rec2["command_ms"] is None, rec2
+    assert rec2["guardrail_ms"] is not None and rec2["guardrail_ms"] >= 0, rec2
 
 # 22) allow-any command executions should log explicit reason.
 with tempfile.TemporaryDirectory() as tmpdir:

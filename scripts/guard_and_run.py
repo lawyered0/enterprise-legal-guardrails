@@ -15,6 +15,7 @@ import os
 import re
 import shlex
 import subprocess
+import time
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -208,6 +209,8 @@ def _append_audit_log(
     error_kind: str | None = None,
     error_stage: str | None = None,
     error_message: str | None = None,
+    guardrail_ms: int | None = None,
+    command_ms: int | None = None,
 ) -> None:
     if not path:
         return
@@ -217,7 +220,11 @@ def _append_audit_log(
         "app": app or "",
         "action": action,
         "status": status,
-        "decision": "blocked" if status == "BLOCK" or (strict and status == "REVIEW") else "proceed",
+        "decision": (
+            "blocked"
+            if status == "BLOCK" or (strict and status == "REVIEW") or error_kind is not None
+            else "proceed"
+        ),
         "score": report.get("score", 0),
         "findings_count": report.get("findings_count", 0),
         "text_hash": _hash_text(report.get("original_text", "")),
@@ -235,6 +242,8 @@ def _append_audit_log(
         "error_kind": error_kind,
         "error_stage": error_stage,
         "error_message": error_message,
+        "guardrail_ms": guardrail_ms,
+        "command_ms": command_ms,
     }
 
     log_path = Path(path).expanduser()
@@ -289,7 +298,7 @@ def run_guardrails(
     block_threshold: int | None,
     strict: bool,
     checker_timeout: int,
-) -> tuple[dict, bool]:
+) -> tuple[dict, bool, int]:
     if not CHECKER_SCRIPT.exists():
         raise RuntimeError(f"Guardrail script not found: {CHECKER_SCRIPT}")
 
@@ -316,6 +325,7 @@ def run_guardrails(
     if block_threshold is not None:
         args.extend(["--block-threshold", str(block_threshold)])
 
+    start = time.perf_counter()
     try:
         proc = subprocess.run(
             args,
@@ -326,6 +336,7 @@ def run_guardrails(
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"Guardrail check timed out after {checker_timeout}s.") from exc
+    duration_ms = int((time.perf_counter() - start) * 1000)
 
     if not proc.stdout:
         stderr = (proc.stderr or "").strip()
@@ -354,13 +365,13 @@ def run_guardrails(
             f"Findings: {report.get('findings_count', 'n/a')}",
             file=sys.stderr,
         )
-        return report, True
+        return report, True, duration_ms
 
     if status == "REVIEW":
         suggestion = (report.get("suggestions") or ["Consider rewriting before execution."])[0]
         print(f"Guardrail REVIEW for {action} on {app or 'unknown'}: {suggestion}", file=sys.stderr)
 
-    return report, False
+    return report, False, duration_ms
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -703,8 +714,9 @@ def main() -> int:
         )
         return 1
 
+    guardrail_ms = 0
     try:
-        report, blocked = run_guardrails(
+        report, blocked, guardrail_ms = run_guardrails(
             text=text,
             action=args.action,
             app=args.app,
@@ -743,10 +755,12 @@ def main() -> int:
             dry_run=args.dry_run,
             command_exit_code=None,
             strict=args.strict,
-        allow_any_command=args.allow_any_command,
-        allowed_command_count=len(args.allowed_command),
-        allow_any_command_reason=args.allow_any_command_reason,
-        allow_any_command_approval_token=args.allow_any_command_approval_token,
+            allow_any_command=args.allow_any_command,
+            allowed_command_count=len(args.allowed_command),
+            allow_any_command_reason=args.allow_any_command_reason,
+            allow_any_command_approval_token=args.allow_any_command_approval_token,
+            guardrail_ms=guardrail_ms,
+            command_ms=None,
         )
         return 2
 
@@ -762,10 +776,12 @@ def main() -> int:
             dry_run=True,
             command_exit_code=None,
             strict=args.strict,
-        allow_any_command=args.allow_any_command,
-        allowed_command_count=len(args.allowed_command),
-        allow_any_command_reason=args.allow_any_command_reason,
-        allow_any_command_approval_token=args.allow_any_command_approval_token,
+            allow_any_command=args.allow_any_command,
+            allowed_command_count=len(args.allowed_command),
+            allow_any_command_reason=args.allow_any_command_reason,
+            allow_any_command_approval_token=args.allow_any_command_approval_token,
+            guardrail_ms=guardrail_ms,
+            command_ms=None,
         )
         return 0
 
@@ -773,10 +789,14 @@ def main() -> int:
     if args.sanitize_env:
         env = _sanitize_env(args.keep_env, args.keep_env_prefix)
         
+    command_ms = None
+    command_start = time.perf_counter()
     try:
         proc = subprocess.run(command, check=False, env=env, timeout=args.command_timeout)
+        command_ms = int((time.perf_counter() - command_start) * 1000)
     except FileNotFoundError:
         msg = f"Command not found: {command[0]}"
+        command_ms = int((time.perf_counter() - command_start) * 1000)
         print(msg, file=sys.stderr)
         _append_audit_log(
             args.audit_log,
@@ -796,10 +816,13 @@ def main() -> int:
             error_stage="execution",
             error_kind="execution.command_not_found",
             error_message=msg,
+            guardrail_ms=guardrail_ms,
+            command_ms=command_ms,
         )
         return 1
     except subprocess.TimeoutExpired:
         msg = f"Guardrail-wrapped command timed out after {args.command_timeout}s."
+        command_ms = int((time.perf_counter() - command_start) * 1000)
         print(msg, file=sys.stderr)
         _append_audit_log(
             args.audit_log,
@@ -819,6 +842,8 @@ def main() -> int:
             error_stage="execution",
             error_kind="execution.command_timeout",
             error_message=msg,
+            guardrail_ms=guardrail_ms,
+            command_ms=command_ms,
         )
         return 1
 
@@ -846,6 +871,8 @@ def main() -> int:
         error_stage="execution" if command_error_kind else None,
         error_kind=command_error_kind,
         error_message=command_error_message,
+        guardrail_ms=guardrail_ms,
+        command_ms=command_ms,
     )
 
     return proc.returncode
