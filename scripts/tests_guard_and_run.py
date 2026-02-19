@@ -26,6 +26,9 @@ def run(*args: str, env: dict[str, str] | None = None, input_text: str | None = 
     else:
         base_env = dict(env)
 
+    if "ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE" not in base_env:
+        base_env["ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE"] = "1"
+
     command = [sys.executable, str(SCRIPT), *args]
     proc = subprocess.run(
         command,
@@ -544,7 +547,43 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert rec["guardrail_ms"] is not None and rec["guardrail_ms"] >= 0, rec
     assert rec["command_ms"] is not None and rec["command_ms"] >= 900, rec
 
-# 16) dry-run does not execute the wrapped command.
+# 16) Execution requires explicit enablement unless --dry-run is used.
+with tempfile.TemporaryDirectory() as tmpdir:
+    log_path = Path(tmpdir) / "execute_disabled.jsonl"
+    env_execute_off = {
+        **os.environ,
+        "ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE": "0",
+    }
+    code, out, err = run(
+        "--allowed-command",
+        "python3",
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--audit-log",
+        str(log_path),
+        "--",
+        "python3",
+        "-c",
+        "print('should-not-run')",
+        env=env_execute_off,
+    )
+    assert code == 2, (code, out, err)
+    assert "execution is disabled" in err.lower(), (out, err)
+
+    rows = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 1, rows
+    rec = json.loads(rows[-1])
+    assert rec["error_stage"] == "execution", rec
+    assert rec["error_kind"] == "preflight.execution_disabled", rec
+    assert rec["command_ran"] is False, rec
+    assert rec["dry_run"] is True, rec
+    assert rec.get("error_message", ""), rec
+
+# 17) dry-run does not execute the wrapped command.
 with tempfile.TemporaryDirectory() as tmpdir:
     marker = Path(tmpdir) / "ran.txt"
     code, out, err = run(
@@ -563,7 +602,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert code == 0, (code, out, err)
     assert not marker.exists(), (marker, "command should not run during dry-run")
 
-# 17) Checker timeout argument validation.
+# 18) Checker timeout argument validation.
 code, out, err = run(
     "--checker-timeout",
     "0",

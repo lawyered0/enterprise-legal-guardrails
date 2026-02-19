@@ -111,17 +111,17 @@ For skills/tools without native guardrail hooks (for example: Gmail, custom webs
 publishing, custom message bots), run outbound operations through the wrapper:
 
 ```bash
-python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app <app_name>   --action <post|comment|message|trade|market-analysis|generic>   --text "$DRAFT"   -- <outbound command...>
+python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app <app_name>   --action <post|comment|message|trade|market-analysis|generic> --execute --text "$DRAFT"   -- <outbound command...>
 ```
 
 Examples:
 
 ```bash
 # Gmail via gog
-python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app gmail --action message   --text "Hello, ..."   -- gog gmail send --to user@domain.com --subject "Update" --body "Hello, ..."
+python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app gmail --action message --execute --text "Hello, ..."   -- gog gmail send --to user@domain.com --subject "Update" --body "Hello, ..."
 
 # Website/publication publish flow
-python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app website --action post   --text "$POST_COPY"   -- npm run publish-post "$POST_COPY"
+python3 /path/to/enterprise-legal-guardrails/scripts/guard_and_run.py   --app website --action post --execute --text "$POST_COPY"   -- npm run publish-post "$POST_COPY"
 ```
 
 Use this wrapper to apply the same policy checks in non-Babylon outbound flows.
@@ -156,6 +156,8 @@ Execution safety is allowlist-first by default. Wrapper requires explicit
   - Mandatory approval token for any `allow-any` bypass invocation; stored as a short token fingerprint in audit logs.
 - `--allowed-command <exe...>` / `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`
   - Allow-list executables (supports comma/space lists and wildcards).
+- `--execute` / `ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE`
+  - Enables execution after guard checks. Without this flag, runs are validation-only.
 - `--strict` / `ENTERPRISE_LEGAL_GUARDRAILS_STRICT`
   - Escalate `REVIEW` to hard block.
 - `--sanitize-env`

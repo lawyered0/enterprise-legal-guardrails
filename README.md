@@ -124,6 +124,9 @@ When outbound commands are executed through the adapter, use these safety contro
   - Required when using `--allow-any-command`. Include short rationale with ticket format (`SEC-####: ...`).
 - `--allow-any-command-approval-token` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_APPROVAL_TOKEN`)
   - Required when using `--allow-any-command`. This is logged as a short hash fingerprint in audit logs.
+- `--execute`
+  - Explicitly allow command execution. Without this flag the wrapper runs in validation-only mode and returns code 2 when execution is requested.
+  - Equivalent environment toggle: `ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE=true` (or `ELG_EXECUTE`, `BABYLON_EXECUTE`).
 - `--allowed-command <pattern...>` (or `ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS`)
   - Restrict executed binaries to a whitelist (`python3,gog` etc.).
 - `--strict` (or `ENTERPRISE_LEGAL_GUARDRAILS_STRICT=true`)
@@ -143,6 +146,7 @@ Example:
 python3 scripts/guard_and_run.py \
   --app gmail \
   --action message \
+  --execute \
   --allowed-command python3,gog \
   --sanitize-env --keep-env-prefix GOG_ \
   --command-timeout 45 \

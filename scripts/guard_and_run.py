@@ -533,6 +533,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Validate and log only; do not execute command.",
     )
     parser.add_argument(
+        "--execute",
+        action="store_true",
+        default=_get_env_bool(
+            "ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE",
+            "ELG_EXECUTE",
+            "BABYLON_EXECUTE",
+            default=False,
+        ),
+        help="Explicitly allow command execution. Without this flag, guard-and-run works in validation-only mode.",
+    )
+    parser.add_argument(
         "command",
         nargs=argparse.REMAINDER,
         help="Command to run after '--', for example: -- python3 script.py ...",
@@ -784,6 +795,35 @@ def main() -> int:
             command_ms=None,
         )
         return 0
+
+    if not args.execute:
+        msg = (
+            "Execution is disabled. Pass --execute (or set ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE=true) "
+            "to run the wrapped command."
+        )
+        print(msg, file=sys.stderr)
+        _append_audit_log(
+            args.audit_log,
+            app=args.app,
+            action=args.action,
+            status=str(status),
+            report=report,
+            command=command,
+            command_ran=False,
+            dry_run=True,
+            command_exit_code=None,
+            strict=args.strict,
+            allow_any_command=args.allow_any_command,
+            allowed_command_count=len(args.allowed_command),
+            allow_any_command_reason=args.allow_any_command_reason,
+            allow_any_command_approval_token=args.allow_any_command_approval_token,
+            error_stage="execution",
+            error_kind="preflight.execution_disabled",
+            error_message=msg,
+            guardrail_ms=guardrail_ms,
+            command_ms=None,
+        )
+        return 2
 
     env = None
     if args.sanitize_env:
