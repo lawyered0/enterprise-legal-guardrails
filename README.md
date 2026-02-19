@@ -98,7 +98,7 @@ Gmail/website scripts), run your command through:
 ```bash
 python3 scripts/check_enterprise_guardrails.py ... # run checks directly
 # or (recommended)
-python3 scripts/guard_and_run.py   --app gmail --action message   --text "$DRAFT"   -- gog gmail send --to user@domain.com --subject "Update" --body "$DRAFT"
+python3 scripts/guard_and_run.py   --app gmail --action message --execute  --text "$DRAFT"   -- gog gmail send --to user@domain.com --subject "Update" --body "$DRAFT"
 ```
 
 Notes:

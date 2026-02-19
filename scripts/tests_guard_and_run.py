@@ -10,6 +10,12 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent / "guard_and_run.py"
 
+EXECUTE_ENV_VARS = (
+    "ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE",
+    "ELG_EXECUTE",
+    "BABYLON_EXECUTE",
+)
+
 
 def run(*args: str, env: dict[str, str] | None = None, input_text: str | None = None) -> tuple[int, str, str]:
     if env is None:
@@ -26,7 +32,7 @@ def run(*args: str, env: dict[str, str] | None = None, input_text: str | None = 
     else:
         base_env = dict(env)
 
-    if "ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE" not in base_env:
+    if not any(name in base_env for name in EXECUTE_ENV_VARS):
         base_env["ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE"] = "1"
 
     command = [sys.executable, str(SCRIPT), *args]
@@ -143,6 +149,9 @@ env_no_allowlist = {k: v for k, v in os.environ.items() if k not in {
     "ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS",
     "ELG_ALLOWED_COMMANDS",
     "BABYLON_ALLOWED_COMMANDS",
+    "ENTERPRISE_LEGAL_GUARDRAILS_EXECUTE",
+    "ELG_EXECUTE",
+    "BABYLON_EXECUTE",
 }}
 code, out, err = run(
     "--app",
@@ -582,6 +591,31 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert rec["command_ran"] is False, rec
     assert rec["dry_run"] is True, rec
     assert rec.get("error_message", ""), rec
+
+# 16b) Execute alias env vars are honored by the runner helper.
+with tempfile.TemporaryDirectory() as tmpdir:
+    env_execute_alias = {
+        **os.environ,
+        "BABYLON_EXECUTE": "1",
+        "ENTERPRISE_LEGAL_GUARDRAILS_ALLOWED_COMMANDS": "python3",
+    }
+    code, out, err = run(
+        "--allowed-command",
+        "python3",
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--",
+        "python3",
+        "-c",
+        "print('alias-ok')",
+        env=env_execute_alias,
+    )
+    assert code == 0, (code, out, err)
+    assert out.strip() == "alias-ok", (out, err)
 
 # 17) dry-run does not execute the wrapped command.
 with tempfile.TemporaryDirectory() as tmpdir:
