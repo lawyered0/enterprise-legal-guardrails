@@ -130,11 +130,12 @@ def _is_allowed(command: list[str], allowed: list[str]) -> bool:
 
         candidate = pattern.lower()
         if candidate.startswith("regex:"):
-            import re
-
             expr = candidate.split(":", 1)[1]
-            if re.fullmatch(expr, target_lower):
-                return True
+            try:
+                if re.fullmatch(expr, target_lower):
+                    return True
+            except re.error as exc:
+                raise RuntimeError(f"Invalid regex allowlist pattern '{pattern}': {exc}") from exc
             continue
 
         if fnmatch.fnmatch(target_lower, candidate) or fnmatch.fnmatch(target_name_lower, candidate):
@@ -559,7 +560,13 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    if not args.allow_any_command and not _is_allowed(command, args.allowed_command):
+    try:
+        command_allowed = _is_allowed(command, args.allowed_command)
+    except RuntimeError as exc:
+        print(f"Invalid allowlist configuration: {exc}", file=sys.stderr)
+        return 2
+
+    if not args.allow_any_command and not command_allowed:
         print(
             f"Blocked command '{_command_repr(command)}' because it is not in the allowlist.",
             file=sys.stderr,

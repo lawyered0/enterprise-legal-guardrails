@@ -192,7 +192,26 @@ code, out, err = run(
 assert code == 0, (code, out, err)
 assert out.strip() == "regex-ok", (out, err)
 
-# 9) Legacy alias allowlist variable should apply.
+# 9a) Invalid regex allowlist pattern should fail safely.
+code, out, err = run(
+    "--allowed-command",
+    "regex:[",
+    "--app",
+    "website",
+    "--action",
+    "post",
+    "--text",
+    "Hello",
+    "--",
+    "python3",
+    "-c",
+    "print('should-not-run')",
+    env=env_no_allowlist,
+)
+assert code == 2, (code, out, err)
+assert "Invalid allowlist configuration" in err, (out, err)
+
+# 9b) Legacy alias allowlist variable should apply.
 code, out, err = run(
     "--app",
     "website",
