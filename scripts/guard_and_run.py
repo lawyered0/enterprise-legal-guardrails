@@ -697,33 +697,35 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    try:
-        command_allowed = _is_allowed(command, args.allowed_command)
-    except RuntimeError as exc:
-        msg = f"Invalid allowlist configuration: {exc}"
-        print(msg, file=sys.stderr)
-        _append_pre_execution_audit(
-            args=args,
-            command=command,
-            text=text,
-            error_stage="command-allowlist",
-            error_kind="preflight.allowlist_pattern_invalid",
-            error_message=msg,
-        )
-        return 2
+    if not args.allow_any_command:
+        try:
+            command_allowed = _is_allowed(command, args.allowed_command)
+        except RuntimeError as exc:
+            msg = f"Invalid allowlist configuration: {exc}"
+            print(msg, file=sys.stderr)
+            _append_pre_execution_audit(
+                args=args,
+                command=command,
+                text=text,
+                error_stage="command-allowlist",
+                error_kind="preflight.allowlist_pattern_invalid",
+                error_message=msg,
+            )
+            return 2
 
-    if not args.allow_any_command and not command_allowed:
-        msg = f"Blocked command '{_command_repr(command)}' because it is not in the allowlist."
-        print(msg, file=sys.stderr)
-        _append_pre_execution_audit(
-            args=args,
-            command=command,
-            text=text,
-            error_stage="command-allowlist",
-            error_kind="preflight.command_not_allowed",
-            error_message=msg,
-        )
-        return 1
+        if not command_allowed:
+            msg = f"Blocked command '{_command_repr(command)}' because it is not in the allowlist."
+            print(msg, file=sys.stderr)
+            _append_pre_execution_audit(
+                args=args,
+                command=command,
+                text=text,
+                error_stage="command-allowlist",
+                error_kind="preflight.command_not_allowed",
+                error_message=msg,
+            )
+            return 1
+
 
     guardrail_ms = 0
     try:
