@@ -180,6 +180,15 @@ def _sanitize_env(keep_exact: list[str], keep_prefixes: list[str]) -> dict[str, 
     return env
 
 
+def _build_audit_preflight_report(text: str) -> dict:
+    return {
+        "status": "BLOCK",
+        "score": 0,
+        "findings_count": 0,
+        "original_text": text,
+    }
+
+
 def _append_audit_log(
     path: str | None,
     *,
@@ -196,6 +205,9 @@ def _append_audit_log(
     allowed_command_count: int,
     allow_any_command_reason: str | None,
     allow_any_command_approval_token: str | None,
+    error_kind: str | None = None,
+    error_stage: str | None = None,
+    error_message: str | None = None,
 ) -> None:
     if not path:
         return
@@ -220,6 +232,9 @@ def _append_audit_log(
         "allowed_command_count": int(allowed_command_count),
         "allow_any_command_reason": allow_any_command_reason or "",
         "allow_any_command_approval_token": _fingerprint_token(allow_any_command_approval_token),
+        "error_kind": error_kind,
+        "error_stage": error_stage,
+        "error_message": error_message,
     }
 
     log_path = Path(path).expanduser()
@@ -227,6 +242,39 @@ def _append_audit_log(
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True))
         handle.write("\n")
+
+
+def _append_pre_execution_audit(
+    *,
+    args: argparse.Namespace,
+    command: list[str],
+    text: str,
+    error_stage: str,
+    error_kind: str,
+    error_message: str,
+    command_ran: bool = False,
+    dry_run: bool = False,
+    command_exit_code: int | None = None,
+) -> None:
+    _append_audit_log(
+        args.audit_log,
+        app=args.app,
+        action=args.action,
+        status="BLOCK",
+        report=_build_audit_preflight_report(text),
+        command=command,
+        command_ran=command_ran,
+        dry_run=dry_run,
+        command_exit_code=command_exit_code,
+        strict=args.strict,
+        allow_any_command=args.allow_any_command,
+        allowed_command_count=len(args.allowed_command),
+        allow_any_command_reason=args.allow_any_command_reason,
+        allow_any_command_approval_token=args.allow_any_command_approval_token,
+        error_stage=error_stage,
+        error_kind=error_kind,
+        error_message=error_message,
+    )
 
 
 def run_guardrails(
@@ -503,40 +551,99 @@ def main() -> int:
         text = _read_text(args.text, args.text_file)
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text="",
+            error_stage="input",
+            error_kind="preflight.text_unreadable",
+            error_message=str(exc),
+        )
         return 2
 
     if len(text.encode("utf-8")) > args.max_text_bytes:
-        print(f"Draft text exceeds max allowed bytes ({args.max_text_bytes}).", file=sys.stderr)
+        msg = f"Draft text exceeds max allowed bytes ({args.max_text_bytes})."
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="policy",
+            error_kind="preflight.text_too_large",
+            error_message=msg,
+        )
         return 2
 
     if args.command_timeout <= 0:
-        print("--command-timeout must be a positive integer.", file=sys.stderr)
+        msg = "--command-timeout must be a positive integer."
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="execution",
+            error_kind="preflight.invalid_command_timeout",
+            error_message=msg,
+        )
         return 2
     if args.checker_timeout <= 0:
-        print("--checker-timeout must be a positive integer.", file=sys.stderr)
+        msg = "--checker-timeout must be a positive integer."
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="policy",
+            error_kind="preflight.invalid_checker_timeout",
+            error_message=msg,
+        )
         return 2
 
     if not args.allow_any_command and not args.allowed_command:
-        print(
+        msg = (
             "No command allowlist configured: set --allowed-command (or ELG/BABYLON_ALLOWED_COMMANDS) "
-            "or pass --allow-any-command explicitly.",
-            file=sys.stderr,
+            "or pass --allow-any-command explicitly."
+        )
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="command-allowlist",
+            error_kind="preflight.missing_allowlist",
+            error_message=msg,
         )
         return 1
 
     if args.allow_any_command and not args.allow_any_command_reason:
-        print(
+        msg = (
             "Refusing --allow-any-command without an explicit rationale. "
-            "Set --allow-any-command-reason or ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_REASON.",
-            file=sys.stderr,
+            "Set --allow-any-command-reason or ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_REASON."
+        )
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="command-allowlist",
+            error_kind="preflight.allow_any_missing_reason",
+            error_message=msg,
         )
         return 2
 
     if args.allow_any_command and not args.allow_any_command_approval_token:
-        print(
+        msg = (
             "Refusing --allow-any-command without approval token. "
-            "Set --allow-any-command-approval-token or ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_APPROVAL_TOKEN.",
-            file=sys.stderr,
+            "Set --allow-any-command-approval-token or ENTERPRISE_LEGAL_GUARDRAILS_ALLOW_ANY_COMMAND_APPROVAL_TOKEN."
+        )
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="command-allowlist",
+            error_kind="preflight.allow_any_missing_token",
+            error_message=msg,
         )
         return 2
 
@@ -544,10 +651,18 @@ def main() -> int:
         r"^(?:[A-Z][A-Z0-9_]{2,}-\d{2,}:|INC-\d{3,}:|TICKET-[0-9]{3,}:)",
         args.allow_any_command_reason,
     ):
-        print(
+        msg = (
             "Refusing --allow-any-command because reason format is invalid. "
-            "Use a ticket-like reason, e.g. 'SEC-1234: temporary migration task'.",
-            file=sys.stderr,
+            "Use a ticket-like reason, e.g. 'SEC-1234: temporary migration task'."
+        )
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="command-allowlist",
+            error_kind="preflight.allow_any_invalid_reason_format",
+            error_message=msg,
         )
         return 2
 
@@ -563,13 +678,28 @@ def main() -> int:
     try:
         command_allowed = _is_allowed(command, args.allowed_command)
     except RuntimeError as exc:
-        print(f"Invalid allowlist configuration: {exc}", file=sys.stderr)
+        msg = f"Invalid allowlist configuration: {exc}"
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="command-allowlist",
+            error_kind="preflight.allowlist_pattern_invalid",
+            error_message=msg,
+        )
         return 2
 
     if not args.allow_any_command and not command_allowed:
-        print(
-            f"Blocked command '{_command_repr(command)}' because it is not in the allowlist.",
-            file=sys.stderr,
+        msg = f"Blocked command '{_command_repr(command)}' because it is not in the allowlist."
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="command-allowlist",
+            error_kind="preflight.command_not_allowed",
+            error_message=msg,
         )
         return 1
 
@@ -587,7 +717,16 @@ def main() -> int:
             checker_timeout=args.checker_timeout,
         )
     except RuntimeError as exc:
-        print(f"Guardrail error: {exc}", file=sys.stderr)
+        msg = f"Guardrail error: {exc}"
+        print(msg, file=sys.stderr)
+        _append_pre_execution_audit(
+            args=args,
+            command=command,
+            text=text,
+            error_stage="guardrail-check",
+            error_kind="preflight.guardrail_check_error",
+            error_message=msg,
+        )
         return 1
 
     status = report.get("status", "UNKNOWN")

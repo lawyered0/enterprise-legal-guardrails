@@ -157,6 +157,32 @@ code, out, err = run(
 assert code == 1, (code, out, err)
 assert "No command allowlist configured" in err, (out, err)
 
+# 6c) Missing allowlist should include pre-execution audit context.
+with tempfile.TemporaryDirectory() as tmpdir:
+    log_path = Path(tmpdir) / "preflight_block.jsonl"
+    code, out, err = run(
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--audit-log",
+        str(log_path),
+        "--",
+        "python3",
+        "-c",
+        "print('should-not-run')",
+        env=env_no_allowlist,
+    )
+    assert code == 1, (code, out, err)
+    rows = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 1, rows
+    rec = json.loads(rows[-1])
+    assert rec["error_stage"] == "command-allowlist", rec
+    assert rec["error_kind"] == "preflight.missing_allowlist", rec
+    assert isinstance(rec.get("error_message"), str) and rec["error_message"], rec
+
 # 7) Explicit allow-list blocks unexpected binaries.
 code, out, err = run(
     "--allowed-command",
@@ -210,6 +236,34 @@ code, out, err = run(
 )
 assert code == 2, (code, out, err)
 assert "Invalid allowlist configuration" in err, (out, err)
+
+# 9a2) Invalid regex should include pre-execution audit context.
+with tempfile.TemporaryDirectory() as tmpdir:
+    log_path = Path(tmpdir) / "invalid_regex_block.jsonl"
+    code, out, err = run(
+        "--allowed-command",
+        "regex:[",
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--audit-log",
+        str(log_path),
+        "--",
+        "python3",
+        "-c",
+        "print('should-not-run')",
+        env=env_no_allowlist,
+    )
+    assert code == 2, (code, out, err)
+    rows = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 1, rows
+    rec = json.loads(rows[-1])
+    assert rec["error_kind"] == "preflight.allowlist_pattern_invalid", rec
+    assert rec["error_stage"] == "command-allowlist", rec
+    assert "Invalid regex allowlist pattern" in (rec.get("error_message") or ""), rec
 
 # 9b) Legacy alias allowlist variable should apply.
 code, out, err = run(
