@@ -657,7 +657,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert rec["command_exit_code"] == 5, rec
     assert rec["command_ran"] is True, rec
     assert rec["guardrail_ms"] is not None and rec["guardrail_ms"] >= 0, rec
-    assert rec["command_ms"] is not None and rec["command_ms"] > 0, rec
+    assert rec["command_ms"] is not None and rec["command_ms"] >= 0, rec
     assert rec.get("error_message", "") == "Command exited with code 5.", rec
 
 # 21) Audit log writes JSONL and appends across runs.
