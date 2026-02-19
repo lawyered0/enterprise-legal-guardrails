@@ -512,22 +512,35 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert out.strip() == "True True False", (out, err)
 
 # 15) command-timeout blocks long-running command.
-code, out, err = run(
-    "--command-timeout",
-    "1",
-    "--app",
-    "website",
-    "--action",
-    "post",
-    "--text",
-    "Hello",
-    "--",
-    "python3",
-    "-c",
-    "import time; time.sleep(2)",
-)
-assert code == 1, (code, out, err)
-assert "timed out" in err.lower(), (out, err)
+with tempfile.TemporaryDirectory() as tmpdir:
+    log_path = Path(tmpdir) / "timeout_audit.jsonl"
+    code, out, err = run(
+        "--command-timeout",
+        "1",
+        "--audit-log",
+        str(log_path),
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--",
+        "python3",
+        "-c",
+        "import time; time.sleep(2)",
+    )
+    assert code == 1, (code, out, err)
+    assert "timed out" in err.lower(), (out, err)
+
+    rows = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 1, rows
+    rec = json.loads(rows[-1])
+    assert rec["error_stage"] == "execution", rec
+    assert rec["error_kind"] == "execution.command_timeout", rec
+    assert "timed out" in (rec.get("error_message") or "").lower(), rec
+    assert rec["command_exit_code"] is None, rec
+    assert rec["command_ran"] is False, rec
 
 # 16) dry-run does not execute the wrapped command.
 with tempfile.TemporaryDirectory() as tmpdir:
@@ -585,35 +598,61 @@ assert code == 2, (code, out, err)
 assert "must be a positive integer" in err
 
 # 19) Command not found should return 1 with explicit message.
-code, out, err = run(
-    "--allowed-command",
-    "definitely-missing-command",
-    "--app",
-    "website",
-    "--action",
-    "post",
-    "--text",
-    "Hello",
-    "--",
-    "definitely-missing-command",
-)
-assert code == 1, (code, out, err)
-assert "Command not found" in err
+with tempfile.TemporaryDirectory() as tmpdir:
+    log_path = Path(tmpdir) / "command_not_found.jsonl"
+    code, out, err = run(
+        "--allowed-command",
+        "definitely-missing-command",
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--audit-log",
+        str(log_path),
+        "--",
+        "definitely-missing-command",
+    )
+    assert code == 1, (code, out, err)
+    assert "Command not found" in err
 
-# 20) Non-zero command exit code should be propagated.
-code, out, err = run(
-    "--app",
-    "website",
-    "--action",
-    "post",
-    "--text",
-    "Hello",
-    "--",
-    "python3",
-    "-c",
-    "import sys; sys.exit(5)",
-)
-assert code == 5, (code, out, err)
+    rows = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 1, rows
+    rec = json.loads(rows[-1])
+    assert rec["error_stage"] == "execution", rec
+    assert rec["error_kind"] == "execution.command_not_found", rec
+    assert rec["command_ran"] is False, rec
+    assert rec["command_exit_code"] is None, rec
+    assert "definitely-missing-command" in (rec.get("error_message") or ""), rec
+
+# 20) Non-zero command exit code should be propagated with audit context.
+with tempfile.TemporaryDirectory() as tmpdir:
+    log_path = Path(tmpdir) / "command_exit_nonzero.jsonl"
+    code, out, err = run(
+        "--app",
+        "website",
+        "--action",
+        "post",
+        "--text",
+        "Hello",
+        "--audit-log",
+        str(log_path),
+        "--",
+        "python3",
+        "-c",
+        "import sys; sys.exit(5)",
+    )
+    assert code == 5, (code, out, err)
+
+    rows = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 1, rows
+    rec = json.loads(rows[-1])
+    assert rec["error_stage"] == "execution", rec
+    assert rec["error_kind"] == "execution.command_exit_nonzero", rec
+    assert rec["command_exit_code"] == 5, rec
+    assert rec["command_ran"] is True, rec
+    assert rec.get("error_message", "") == "Command exited with code 5.", rec
 
 # 21) Audit log writes JSONL and appends across runs.
 with tempfile.TemporaryDirectory() as tmpdir:

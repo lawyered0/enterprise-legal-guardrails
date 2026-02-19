@@ -776,7 +776,8 @@ def main() -> int:
     try:
         proc = subprocess.run(command, check=False, env=env, timeout=args.command_timeout)
     except FileNotFoundError:
-        print(f"Command not found: {command[0]}", file=sys.stderr)
+        msg = f"Command not found: {command[0]}"
+        print(msg, file=sys.stderr)
         _append_audit_log(
             args.audit_log,
             app=args.app,
@@ -788,14 +789,18 @@ def main() -> int:
             dry_run=False,
             command_exit_code=None,
             strict=args.strict,
-        allow_any_command=args.allow_any_command,
-        allowed_command_count=len(args.allowed_command),
-        allow_any_command_reason=args.allow_any_command_reason,
-        allow_any_command_approval_token=args.allow_any_command_approval_token,
+            allow_any_command=args.allow_any_command,
+            allowed_command_count=len(args.allowed_command),
+            allow_any_command_reason=args.allow_any_command_reason,
+            allow_any_command_approval_token=args.allow_any_command_approval_token,
+            error_stage="execution",
+            error_kind="execution.command_not_found",
+            error_message=msg,
         )
         return 1
     except subprocess.TimeoutExpired:
-        print(f"Guardrail-wrapped command timed out after {args.command_timeout}s.", file=sys.stderr)
+        msg = f"Guardrail-wrapped command timed out after {args.command_timeout}s."
+        print(msg, file=sys.stderr)
         _append_audit_log(
             args.audit_log,
             app=args.app,
@@ -807,12 +812,21 @@ def main() -> int:
             dry_run=False,
             command_exit_code=None,
             strict=args.strict,
-        allow_any_command=args.allow_any_command,
-        allowed_command_count=len(args.allowed_command),
-        allow_any_command_reason=args.allow_any_command_reason,
-        allow_any_command_approval_token=args.allow_any_command_approval_token,
+            allow_any_command=args.allow_any_command,
+            allowed_command_count=len(args.allowed_command),
+            allow_any_command_reason=args.allow_any_command_reason,
+            allow_any_command_approval_token=args.allow_any_command_approval_token,
+            error_stage="execution",
+            error_kind="execution.command_timeout",
+            error_message=msg,
         )
         return 1
+
+    command_error_kind = None
+    command_error_message = None
+    if proc.returncode != 0:
+        command_error_kind = "execution.command_exit_nonzero"
+        command_error_message = f"Command exited with code {proc.returncode}."
 
     _append_audit_log(
         args.audit_log,
@@ -829,6 +843,9 @@ def main() -> int:
         allowed_command_count=len(args.allowed_command),
         allow_any_command_reason=args.allow_any_command_reason,
         allow_any_command_approval_token=args.allow_any_command_approval_token,
+        error_stage="execution" if command_error_kind else None,
+        error_kind=command_error_kind,
+        error_message=command_error_message,
     )
 
     return proc.returncode
