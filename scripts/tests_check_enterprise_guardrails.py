@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """Basic regression tests for enterprise legal guardrails."""
 
+import subprocess
 import sys
 from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parent / "check_enterprise_guardrails.py"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from check_enterprise_guardrails import analyze_text
+
+
+def run_script(args: list[str]) -> tuple[int, str, str]:
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
 
 
 def run_all():
@@ -57,6 +69,12 @@ def run_all():
     )
     assert report["status"] == "PASS", report
     assert report["score"] == 0, report
+
+    # 6) Missing input file should fail cleanly without traceback.
+    code, _, err = run_script(["--action", "post", "--file", "/tmp/definitely_missing_foo_123456.txt"])
+    assert code == 1, (code, err)
+    assert "Unable to read input text" in err, err
+    assert "Traceback" not in err, err
 
 
 if __name__ == "__main__":
